@@ -25,6 +25,10 @@ class Room:
     async def nextTask(self):
         data = await self.queue.get()
         self.queue.task_done()
+        if data["type"] == "expired":
+            print("Room expired")
+            await self.close()
+            return None
         return data
 
     async def connect(self):
@@ -53,7 +57,7 @@ def createRoom():
     return None
 
 def joinRoom(code,token):
-    return Room(code.json()["RoomID"],code.json()["OwnerToken"])
+    return Room(code,token)
 
 async def main():
     room = createRoom()
@@ -63,7 +67,10 @@ async def main():
         print("Room ID:", room.code)
         print("Owner Token:", room.token)
         while True:
-            await room.nextTask()
+            data = await room.nextTask()
+            if data == None:
+                break
+            print(data)
     else:
         print("An error happened while connecting to the room")
 
