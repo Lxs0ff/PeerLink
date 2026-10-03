@@ -2,6 +2,7 @@ import websockets as ws
 import asyncio
 import requests
 import json
+import stun
 
 SERVER = "0x1.lxsdev.net"
 
@@ -13,6 +14,9 @@ class Room:
         self.recv_task = None
         self.queue = asyncio.Queue()
 
+    async def send(self,data):
+        await self.webs.send(data)
+
     async def recvData(self):
         try:
             while True:
@@ -22,6 +26,12 @@ class Room:
         except asyncio.CancelledError:
             pass
 
+    async def waitFor(self,type):
+        while True:
+            data = await self.nextTask()
+            if data["type"] == type:
+                return data
+
     async def nextTask(self):
         data = await self.queue.get()
         self.queue.task_done()
@@ -30,6 +40,28 @@ class Room:
             await self.close()
             return None
         return data
+
+    async def exchangeAddr(self,fp=None):
+        if self.token and fp:
+            print("Waiting for a connection")
+            await self.waitFor("user_joined")
+            addr = stun.getInfo()
+            addr = {"Ip":addr[0],"Port":addr[1],"Fingerprint":fp}
+            print("Sending address ...")
+            await self.send(json.dumps(addr))
+            print("Waiting for address ...")
+            data = await self.waitFor("relay")
+            data = json.loads(data["data"])
+            return (data["Ip"],data["Port"])
+        else:
+            print("Waiting for address ...")
+            data = await self.waitFor("relay")
+            addr = stun.getInfo()
+            addr = {"Ip":addr[0],"Port":addr[1]}
+            print("Sending address ...")
+            await self.send(json.dumps(addr))
+            data = json.loads(data["data"])
+            return (data["Ip"],data["Port"],data["Fingerprint"])
 
     async def connect(self):
         if self.token:
@@ -56,24 +88,7 @@ def createRoom():
         return Room(code.json()["RoomID"],code.json()["OwnerToken"])
     return None
 
-def joinRoom(code,token):
+def joinRoom(code,token = None):
     return Room(code,token)
 
-async def main():
-    room = createRoom()
-    connected = await room.connect()
-    if connected:
-        print("Connection successfull")
-        print("Room ID:", room.code)
-        print("Owner Token:", room.token)
-        while True:
-            data = await room.nextTask()
-            if data == None:
-                break
-            print(data)
-    else:
-        print("An error happened while connecting to the room")
-
-if __name__ == "__main__":
-    asyncio.run(main())
 

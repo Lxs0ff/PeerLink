@@ -1,5 +1,6 @@
 import socket 
 import struct
+import time
 import os
 
 STUN_SERVER = "stun.cloudflare.com"
@@ -36,6 +37,18 @@ def getInfo():
     ip = socket.inet_ntoa(ip)
     port = int.from_bytes(value[2:4],"big")^(MAGIC_COOKIE>>16)
     return (ip,port)
+
+async def holePunching(addr):
+    start = time.monotonic()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind(addr)
+        while time.monotonic() - start < 2:
+            sock.send(b"!punch!")
+            time.sleep(0.2)
+    finally:
+        sock.close()
+
 
 if __name__ == "__main__":
     print(getInfo())
