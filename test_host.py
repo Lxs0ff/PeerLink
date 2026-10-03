@@ -14,7 +14,7 @@ async def main():
         addr = await room.exchangeAddr(fp)
         print("Peer Address:", addr)
         print("Hole Punching ...")
-        await stun.holePunching(addr)
+        await stun.holePunching(stun.getInfo(),addr)
         print("Hole Punched !")
     else:
         print("An error happened while connecting to the room")

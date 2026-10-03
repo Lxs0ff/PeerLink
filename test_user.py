@@ -16,7 +16,7 @@ async def main():
         print("Peer Address:", addr[0:2])
         print("Host Fingerprint:",fp)
         print("Hole Punching ...")
-        await stun.holePunching(addr)
+        await stun.holePunching(stun.getInfo(),addr)
         print("Hole Punched !")
     else:
         print("An error happened while connecting to the room")

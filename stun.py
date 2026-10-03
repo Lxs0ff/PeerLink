@@ -38,13 +38,17 @@ def getInfo():
     port = int.from_bytes(value[2:4],"big")^(MAGIC_COOKIE>>16)
     return (ip,port)
 
-async def holePunching(addr):
-    start = time.monotonic()
+async def holePunching(addr,peer_addr):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        sock.bind(addr)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("0.0.0.0", addr[1]))
+        start = time.monotonic()
         while time.monotonic() - start < 2:
-            sock.send(b"!punch!")
+            try:
+                sock.sendto(b"!punch!", peer_addr)
+            except OSError:
+                pass
             time.sleep(0.2)
     finally:
         sock.close()
