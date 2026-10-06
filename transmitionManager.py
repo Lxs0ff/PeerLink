@@ -42,6 +42,7 @@ class TransmitionManager:
         self.pendingUploads = {}
         self.hashes = {}
         self.uploadStatus = {}
+        self.messagesQueue = asyncio.Queue()
         self.systemPackets = asyncio.Queue()
         self.fileRequests = asyncio.Queue()
         self.conf = conf
@@ -120,14 +121,14 @@ class TransmitionManager:
                     self.networking.send(self.packetManager.createFileConfirmation("Fail",tid))
                 del self.hashes[tid]
             self.systemPackets.task_done()
-
+            
     async def handleData(self):
         while self.running:
             data = await self.networking.queue.get()
             if data[0:1] == PacketManager.OP_SYSTEM:
                 await self.systemPackets.put(data[1:])
             elif data[0:1] == PacketManager.OP_TEXT:
-                print(data[1:].decode("utf-8"))
+                await self.messagesQueue.put(data[1:].decode("utf-8"))
             elif data[0:1] == PacketManager.OP_FILE_REQUEST:
                 info = json.loads(data[17:].decode("utf-8"))
                 self.pendingDownloads[data[1:17]] = info
