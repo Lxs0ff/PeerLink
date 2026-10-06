@@ -45,23 +45,60 @@ class Room:
         if self.token and fp:
             print("Waiting for a connection")
             await self.waitFor("user_joined")
-            addr = stun.getInfo()
+            addr = None
+            while addr == None:
+                addr = stun.getInfo()
+                if addr != None:
+                    localport = addr[2]
+                    addr = addr[0:2]
             addr = {"Ip":addr[0],"Port":addr[1],"Fingerprint":fp}
             print("Sending address ...")
             await self.send(json.dumps(addr))
             print("Waiting for address ...")
             data = await self.waitFor("relay")
             data = json.loads(data["data"])
-            return (data["Ip"],data["Port"])
+            if data["Ip"] == addr["Ip"]:
+                print("Matching public ip, exchanching local ips...")
+                addr = stun.getLocalInfo(True)
+                localport = addr[1]
+                addr = {"Ip":addr[0],"Port":addr[1]}
+                print("Waiting for confirmation...")
+                await self.waitFor("relay")
+                print("Sending address ...")
+                await self.send(json.dumps(addr))
+                print("Waiting for address ...")
+                data = await self.waitFor("relay")
+                data = json.loads(data["data"])
+            return (data["Ip"],data["Port"]),localport
         else:
             print("Waiting for address ...")
             data = await self.waitFor("relay")
-            addr = stun.getInfo()
+            addr = None
+            while addr == None:
+                addr = stun.getInfo()
+                if addr != None:
+                    localport = addr[2]
+                    addr = addr[0:2]
             addr = {"Ip":addr[0],"Port":addr[1]}
             print("Sending address ...")
             await self.send(json.dumps(addr))
             data = json.loads(data["data"])
-            return (data["Ip"],data["Port"],data["Fingerprint"])
+            fp = data["Fingerprint"]
+            if data["Ip"] == addr["Ip"]:
+                print("Matching public ip, exchanching local ips...")
+                addr = stun.getLocalInfo(False)
+                localport = addr[1]
+                addr = {"Ip":addr[0],"Port":addr[1]}
+                print("Sending confirmation ...")
+                await self.send("Exchange Local IPs")
+                print("Waiting for address ...")
+                data = await self.waitFor("relay")
+                print("Sending address ...")
+                await self.send(json.dumps(addr))
+                data = json.loads(data["data"])
+                return (data["Ip"],data["Port"],fp),localport
+            else:
+                return (data["Ip"],data["Port"],data["Fingerprint"]),localport
 
     async def connect(self):
         if self.token:

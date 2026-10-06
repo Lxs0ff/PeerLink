@@ -8,6 +8,18 @@ STUN_PORT = 3478
 MAGIC_COOKIE = 0x2112A442
 DEFAULT_HEADER = struct.pack("!HHI",0x0001,0,MAGIC_COOKIE)
 
+def getLocalInfo(host=False):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("1.1.1.1", 80))
+        localIp = s.getsockname()[0]
+    except Exception:
+        localIp = "127.0.0.1"
+    finally:
+        s.close()
+    localPort = 4433 if host else 4434
+    return (localIp,localPort)
+
 def getInfo():
     socket.gethostbyname(STUN_SERVER)
     tid = os.urandom(12)
@@ -19,6 +31,7 @@ def getInfo():
     except:
         return None
     finally:
+        localport = sock.getsockname()[1]
         sock.close()
     msg_type, msg_len = struct.unpack("!HH", data[0:4])
     if msg_type != 0x0101 or data[8:20] != tid:
@@ -36,13 +49,13 @@ def getInfo():
     ip = (int.from_bytes(value[4:8],"big")^MAGIC_COOKIE).to_bytes(4, "big")
     ip = socket.inet_ntoa(ip)
     port = int.from_bytes(value[2:4],"big")^(MAGIC_COOKIE>>16)
-    return (ip,port)
+    return (ip,port,localport)
 
-async def holePunching(addr,peer_addr):
+async def holePunching(localport,peer_addr):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("0.0.0.0", addr[1]))
+        sock.bind(("0.0.0.0", localport))
         start = time.monotonic()
         while time.monotonic() - start < 2:
             try:
