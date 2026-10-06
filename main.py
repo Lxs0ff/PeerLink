@@ -6,6 +6,13 @@ from transmitionManager import TransmitionManager
 
 class App:
     def __init__(self):
+
+        # GLOBAL CLASS TODO
+        # TODO: Make background loop for handeling uploads, downloads requests
+        # TODO: Make background loop for handeling messages
+        # TODO: Make Download tab with accepting and denying requests in a list view and download progress in another
+        # TODO: Make Upload tab with sending requests and file upload progress in a list view
+        
         self.page = None
         maincolor = "#33ff66"
         seccolor = "#ffb000"
@@ -154,9 +161,10 @@ class App:
                 ),
                 height=50
             )
-    
+            
             connection_page = ft.SafeArea(
                                 expand=True,
+                                # TODO: Change Content Here for a tabs system (chat, uploads, downloads)
                                 content=ft.Container(
                                     content= ft.Column(
                                         controls=[
