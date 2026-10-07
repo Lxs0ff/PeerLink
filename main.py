@@ -9,7 +9,7 @@ class App:
 
         # GLOBAL CLASS TODO
         # TODO: Make background loop for handeling uploads, downloads requests
-        # TODO: Make background loop for handeling messages
+        # TODO: Make background loop for handeling messages, notifications 
         # TODO: Make Download tab with accepting and denying requests in a list view and download progress in another
         # TODO: Make Upload tab with sending requests and file upload progress in a list view
         
@@ -58,8 +58,36 @@ class App:
         self.page.vertical_alignment = ft.MainAxisAlignment.CENTER
         self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
-        #await self.showConnected()
-        await self.showHomeScreen()
+        await self.showConnected()
+
+        #await self.showHomeScreen()
+
+        self.notification_box = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text(""),
+                    ft.Text(""),
+                    ]
+                ),
+            padding=10,
+            border_radius=5,
+            visible=False,
+            animate_opacity=300,
+            opacity=0,
+        )
+
+        self.notification_layer = ft.Stack(
+                controls=[
+                    ft.Row(
+                        controls=[self.notification_box],
+                        alignment=ft.MainAxisAlignment.END,
+                    )
+                ],
+                expand=True,
+        )
+
+        #self.setNotif("Sup","Test")
+        #await self.showNotif(2)
 
     async def log_message(self, text: str):
         if self.console != None:
@@ -148,6 +176,46 @@ class App:
             self.transmitionManager.sendMessage(self.message_text_area.value)
             self.log_message("You > "+self.message_text_area.value)
 
+    async def showNotif(self,time):
+        self.page.overlay.append(self.notification_layer)
+        self.notification_box.visible = True
+        self.notification_box.opacity = 1
+        self.page.update()
+
+        await asyncio.sleep(time)
+
+        self.notification_box.opacity = 0
+        self.page.update()
+        
+        await asyncio.sleep(0.3) 
+        self.notification_box.visible = False
+        self.page.update()
+
+    def setNotif(self, title:str, message:str):
+        self.notification_box = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text(title),
+                    ft.Text(message),
+                    ]
+                ),
+            padding=10,
+            border_radius=5,
+            visible=False,
+            animate_opacity=300,
+            opacity=0,
+        )
+
+        self.notification_layer = ft.Stack(
+                controls=[
+                    ft.Row(
+                        controls=[self.notification_box],
+                        alignment=ft.MainAxisAlignment.START,
+                    )
+                ],
+                expand=True,
+        )
+
     async def showConnected(self):
             self.page.clean()
     
@@ -164,26 +232,69 @@ class App:
             
             connection_page = ft.SafeArea(
                                 expand=True,
-                                # TODO: Change Content Here for a tabs system (chat, uploads, downloads)
-                                content=ft.Container(
-                                    content= ft.Column(
+                                content=ft.Tabs(
+                                    length=3,
+                                    expand=True,
+                                    content=ft.Column(
                                         controls=[
-                                            ft.Container(
-                                                expand = True,
-                                                border=ft.Border.all(width=0.5, color="white24"),
-                                                padding=10,
-                                                content=self.console
+                                            ft.TabBar(
+                                                scrollable=False,
+                                                tabs=[
+                                                    ft.Tab(
+                                                        label="Chat", 
+                                                        icon=ft.Icons.CHAT_SHARP,
+                                                        expand=True
+                                                    ),
+                                                    ft.Tab(
+                                                        label="Uploads", 
+                                                        icon=ft.Icons.FILE_UPLOAD,
+                                                        expand=True
+                                                    ),
+                                                    ft.Tab(
+                                                        label="Downloads", 
+                                                        icon=ft.Icons.DOWNLOAD,
+                                                        expand=True
+                                                    ),
+                                                ]
                                             ),
-                                            ft.Divider(height=2, thickness=.5),
-                                            ft.Row(
-                                                controls=[self.message_text_area,send_message_button],
-                                                alignment=ft.MainAxisAlignment.CENTER,
+                                            ft.TabBarView(
+                                                expand=True,
+                                                controls=[
+                                                    ft.Container(
+                                                        alignment=ft.Alignment.CENTER,
+                                                        content = ft.Column(
+                                                            alignment=ft.MainAxisAlignment.CENTER,
+                                                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                                            controls = [
+                                                                ft.Container(
+                                                                    expand = True,
+                                                                    border=ft.Border.all(width=0.5, color="white24"),
+                                                                    padding=10,
+                                                                    content=self.console
+                                                                ),
+                                                                ft.Divider(height=2, thickness=.5),
+                                                                ft.Row(
+                                                                    controls=[self.message_text_area,send_message_button],
+                                                                    alignment=ft.MainAxisAlignment.CENTER,
+                                                                ),
+                                                            ]
+                                                        )
+                                                    ),
+                                                    ft.Container(
+                                                        alignment=ft.Alignment.CENTER,
+                                                        content=ft.Text("Uploads"),
+                                                    ),
+                                                    ft.Container(
+                                                        alignment=ft.Alignment.CENTER,
+                                                        content=ft.Text("Downloads"),
+                                                    ),
+                                                ],
                                             ),
+                                            
                                         ],
                                         alignment=ft.MainAxisAlignment.CENTER,
                                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                                     ),
-                                    alignment=ft.Alignment.CENTER,
                                 ),
                 )
             self.page.window.resizable = False
