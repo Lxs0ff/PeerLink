@@ -3,12 +3,19 @@ import certificates as certif
 import quic,stun,signaling,os,asyncio
 from transmitionManager import TransmitionManager
 
+def format_bytes(size_in_bytes):
+    if size_in_bytes == 0: return "0 B"
+    units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+    unit_index = 0
+    while size_in_bytes >= 1024 and unit_index < len(units) - 1:
+        size_in_bytes /= 1024.0
+        unit_index += 1
+    return f"{size_in_bytes:.2f} {units[unit_index]}"
+
 class App:
     def __init__(self):
 
         # GLOBAL CLASS TODO
-        # TODO: Make background loop for handeling uploads, downloads requests
-        # TODO: Make background loop for handeling messages, notifications 
         # TODO: Make Download tab with accepting and denying requests in a list view and download progress in another
         # TODO: Make Upload tab with sending requests and file upload progress in a list view
         
@@ -154,14 +161,10 @@ class App:
             self.transmitionManager.sendMessage(self.message_text_area.value)
             await self.log_message("You > "+self.message_text_area.value)
 
-    def uploadRequest(self,e: ft.FilePickerResultEvent):
-        if not len(e.files):return
-        self.log_message("Upload Request > "+e.files[0])
-        self.transmitionManager.requestSendingFile(os.path.split(e.files[0]))
-
-    async def pickFile(self):
-        self.filePicker.on_result = self.uploadRequest
-        await self.filePicker.pick_files()
+    async def pickFile(self, e):
+        files = await self.filePicker.pick_files()
+        await self.log_message(f"Uploads > Request sent: {files[0].name} ({format_bytes(os.path.getsize(files[0].path))})")
+        self.transmitionManager.requestSendingFile(files[0].path,files[0].name)
 
     async def closeCall(self,reason):
         await self.showHomeScreen()
@@ -169,17 +172,17 @@ class App:
         self.console.controls.clear()
 
     async def reqestCall(self,tid,fileName,fileSize):
-        pass
+        await self.log_message(f"Downloads > New file request: {fileName} ({format_bytes(fileSize)})")
 
     async def statusCall(self,tid,status):
-        pass
+        await self.log_message(f"Uploads > New upload status: {self.transmitionManager.uploads[tid]["FileName"]} -> {status}")
 
     async def setupCallbacks(self):
         self.transmitionManager.messageCallback = self.log_message
         self.transmitionManager.closeCallback = self.closeCall
-        self.requestCallback = self.reqestCall
-        self.statusCallback = self.statusCall
-        self.progressCallback = None
+        self.transmitionManager.requestCallback = self.reqestCall
+        self.transmitionManager.statusCallback = self.statusCall
+        self.transmitionManager.progressCallback = None
 
     async def showConnected(self):
             self.page.window.resizable = False
@@ -336,8 +339,8 @@ class App:
                     self.transmitionManager = None
                 else:
                     await self.log_message("Sucessfully connected to server!")
-                    await self.showConnected()
                     await self.setupCallbacks()
+                    await self.showConnected()
             else:
                 await self.log_message("An error happened while connecting to the room")
                 await self.showHomeScreen()
@@ -363,10 +366,10 @@ class App:
             await self.log_message("Hole Punching ...")
             await stun.holePunching(localport,addr)
             await self.log_message("Hole Punched !")
-            await self.showConnected()
             self.transmitionManager = TransmitionManager(conf,localport,addr)
             await self.transmitionManager.connect()
             await self.setupCallbacks()
+            await self.showConnected()
         else:
             await self.log_message("An error happened while connecting to the room")
             self.showHomeScreen()

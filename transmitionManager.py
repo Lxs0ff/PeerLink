@@ -54,6 +54,8 @@ class TransmitionManager:
 
         self.messageCallback = None
         self.requestCallback = None
+        self.requestDeniedCallback = None
+        self.requestAcceptedCallback = None
         self.progressCallback = None
         self.statusCallback = None
         self.closeCallback = None
@@ -163,10 +165,12 @@ class TransmitionManager:
                 del self.pendingUploads[tid]
                 self.uploads[tid] = info
                 asyncio.create_task(self.handleUpload(tid))
+                # TODO: Add callback
             elif data[0:1] == PacketManager.OP_REQUEST_DENIED:
                 tid = data[1:17]
                 if tid in self.pendingUploads:
                     del self.pendingUploads[tid]
+                    # TODO: Add callback
             elif data[0:1] == PacketManager.OP_FILE_CHUNK:
                 tid = data[1:17]
                 data = data[17:]
