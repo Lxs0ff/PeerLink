@@ -171,8 +171,14 @@ class App:
         self.transmitionManager = None
         self.console.controls.clear()
 
-    async def reqestCall(self,tid,fileName,fileSize):
+    async def requestCall(self,tid,fileName,fileSize):
         await self.log_message(f"Downloads > New file request: {fileName} ({format_bytes(fileSize)})")
+
+    async def requestDeniedCall(self,tid):
+        pass
+
+    async def requestAcceptedCall(self,tid):
+        pass
 
     async def statusCall(self,tid,status):
         await self.log_message(f"Uploads > New upload status: {self.transmitionManager.uploads[tid]["FileName"]} -> {status}")
@@ -180,9 +186,10 @@ class App:
     async def setupCallbacks(self):
         self.transmitionManager.messageCallback = self.log_message
         self.transmitionManager.closeCallback = self.closeCall
-        self.transmitionManager.requestCallback = self.reqestCall
+        self.transmitionManager.requestCallback = self.requestCall
+        self.transmitionManager.requestAcceptedCallback = self.requestAcceptedCall
+        self.transmitionManager.requestDeniedCallback = self.requestDeniedCall
         self.transmitionManager.statusCallback = self.statusCall
-        self.transmitionManager.progressCallback = None
 
     async def showConnected(self):
             self.page.window.resizable = False

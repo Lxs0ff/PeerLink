@@ -56,7 +56,6 @@ class TransmitionManager:
         self.requestCallback = None
         self.requestDeniedCallback = None
         self.requestAcceptedCallback = None
-        self.progressCallback = None
         self.statusCallback = None
         self.closeCallback = None
 
@@ -81,8 +80,8 @@ class TransmitionManager:
 
     def requestSendingFile(self,pathToFile:str,fileName:str):
         packet,tid,info = self.packetManager.createFileRequest(pathToFile,fileName)
-        self.networking.send(packet)
         self.pendingUploads[tid] = info
+        self.networking.send(packet)
 
     def denyDownload(self,tid):
         if tid in self.pendingDownloads:
@@ -91,7 +90,6 @@ class TransmitionManager:
 
     def acceptDownload(self,tid,path):
         if tid in self.pendingDownloads:
-            self.networking.send(self.packetManager.createRequestAccepted(tid))
             info = {
                 "FileName":self.pendingDownloads[tid]["FileName"],
                 "FileSize":self.pendingDownloads[tid]["FileSize"],
@@ -99,8 +97,9 @@ class TransmitionManager:
                 "Hash":hashlib.sha256(),
                 "FileWriter":open(os.path.join(path,self.pendingDownloads[tid]["FileName"]),"ab")
             }
-            del self.pendingDownloads[tid]
             self.downloads[tid] = info
+            self.networking.send(self.packetManager.createRequestAccepted(tid))
+            del self.pendingDownloads[tid]
 
     async def handleUpload(self,tid):
         while True:
@@ -165,12 +164,14 @@ class TransmitionManager:
                 del self.pendingUploads[tid]
                 self.uploads[tid] = info
                 asyncio.create_task(self.handleUpload(tid))
-                # TODO: Add callback
+                if self.requestAcceptedCallback:
+                    asyncio.create_task(self.requestAcceptedCallback())
             elif data[0:1] == PacketManager.OP_REQUEST_DENIED:
                 tid = data[1:17]
                 if tid in self.pendingUploads:
                     del self.pendingUploads[tid]
-                    # TODO: Add callback
+                    if self.requestDeniedCallback:
+                        asyncio.create_task(self.requestDeniedCallback(tid))
             elif data[0:1] == PacketManager.OP_FILE_CHUNK:
                 tid = data[1:17]
                 data = data[17:]
