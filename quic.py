@@ -3,7 +3,7 @@ import certificates as certif
 from aioquic.asyncio import serve
 from aioquic.asyncio import connect
 from aioquic.asyncio import connect, QuicConnectionProtocol
-from aioquic.quic.events import DatagramFrameReceived
+from aioquic.quic.events import DatagramFrameReceived,ConnectionTerminated
 
 class ConnectionProtocol(QuicConnectionProtocol):
     def __init__(self, *args, **kwargs):
@@ -14,6 +14,10 @@ class ConnectionProtocol(QuicConnectionProtocol):
             if isinstance(event, DatagramFrameReceived):
                 if self.networking:
                     asyncio.create_task(self.networking.queue.put(event.data))
+            elif isinstance(event, ConnectionTerminated):
+                if self.networking:
+                    asyncio.create_task(self.networking.queue.put(None))
+
     
     def send(self,data):
         self._quic.send_datagram_frame(data)

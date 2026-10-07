@@ -1,7 +1,6 @@
 import flet as ft
 import certificates as certif
-import quic,stun,signaling
-import asyncio
+import quic,stun,signaling,os,asyncio
 from transmitionManager import TransmitionManager
 
 class App:
@@ -14,9 +13,9 @@ class App:
         # TODO: Make Upload tab with sending requests and file upload progress in a list view
         
         self.page = None
-        maincolor = "#33ff66"
+        maincolor = "#03e33b"
         seccolor = "#ffb000"
-        outlinecolor = "#d8d8d8"
+        outlinecolor = "#efebeb"
         self.mono = ft.TextStyle(font_family="Jersey25", color=maincolor, size=20)
         self.theme = ft.Theme(
         font_family="Jersey25",
@@ -40,9 +39,17 @@ class App:
         self.join_button = None
         self.code_label = None
         self.room_code_field = None
+
         self.message_text_area = None
 
+        self.uploadList = None
+        self.uploadCards = {}
+
+        self.downloadList = None
+        self.downloadCards = {}
+
         self.console = ft.ListView(auto_scroll=True,expand=True)
+        self.filePicker = ft.FilePicker()
 
         self.room_code = None
         self.transmitionManager = None
@@ -58,80 +65,55 @@ class App:
         self.page.vertical_alignment = ft.MainAxisAlignment.CENTER
         self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
-        await self.showConnected()
-
-        #await self.showHomeScreen()
-
-        self.notification_box = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text(""),
-                    ft.Text(""),
-                    ]
-                ),
-            padding=10,
-            border_radius=5,
-            visible=False,
-            animate_opacity=300,
-            opacity=0,
-        )
-
-        self.notification_layer = ft.Stack(
-                controls=[
-                    ft.Row(
-                        controls=[self.notification_box],
-                        alignment=ft.MainAxisAlignment.END,
-                    )
-                ],
-                expand=True,
-        )
-
-        #self.setNotif("Sup","Test")
-        #await self.showNotif(2)
+        #await self.showConnected()
+        await self.showHomeScreen()
 
     async def log_message(self, text: str):
-        if self.console != None:
-            self.console.controls.append(ft.Text(text, size=12))
-            self.page.update()
+        self.console.controls.append(ft.Text(text, size=12))
+        self.page.update()
 
     async def showHomeScreen(self):
+        self.page.window.resizable = False
+        self.page.window.maximizable = False
+        self.page.window.width = 500
+        self.page.window.height = 200
+        self.page.title = "PeerLink"
         self.page.clean()
+        
 
         self.create_button = ft.FilledButton(content="Create Room", on_click=self.createRoom, expand=True)
         self.join_button = ft.FilledButton(content="Join Room", on_click=self.joinRoom)
         self.room_code_field = ft.TextField(label="Room Code", hint_text="example-code-1")
         
         connection_page = ft.SafeArea(
-                    expand=True,
-                    width=430,
-                    content=ft.Container(
-                        content= ft.Column(
-                            controls=[
-                                ft.Row(
-                                    controls=[self.create_button],
-                                    alignment=ft.MainAxisAlignment.CENTER,
-                                ),
-                                ft.Divider(height=2, thickness=.5),
-                                ft.Row(
-                                    controls=[self.room_code_field, self.join_button],
-                                    alignment=ft.MainAxisAlignment.CENTER,
-                                ),
-                            ],
+            expand=True,
+            width=430,
+            content=ft.Container(
+                alignment=ft.Alignment.CENTER, 
+                content= ft.Column(
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.Row(
+                            controls=[self.create_button],
                             alignment=ft.MainAxisAlignment.CENTER,
-                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
-                        alignment=ft.Alignment.CENTER,
-                    ),
-            )
-        
-        self.page.window.resizable = False
-        self.page.window.maximizable = False
-        self.page.window.width = 500
-        self.page.window.height = 200
-        self.page.title = "PeerLink"
+                        ft.Divider(height=2, thickness=.5),
+                        ft.Row(
+                            controls=[self.room_code_field, self.join_button],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                    ],
+                ),
+            ),
+        )
         self.page.add(connection_page)
 
     async def showConnecting(self):
+        self.page.window.resizable = False
+        self.page.window.maximizable = False
+        self.page.window.width = 400
+        self.page.window.height = 325
         self.page.clean()
 
         self.code_label = ft.Text(self.room_code,expand=True)
@@ -142,83 +124,71 @@ class App:
         )
 
         connection_page = ft.SafeArea(
-                            expand=True,
-                            width=430,
-                            content=ft.Container(
-                                content= ft.Column(
-                                    controls=[
-                                        ft.Row(
-                                            controls=[self.code_label,copy_code_button],
-                                            alignment=ft.MainAxisAlignment.CENTER,
-                                        ),
-                                        ft.Divider(height=2, thickness=.5),
-                                        ft.Container(
-                                            height=200, 
-                                            border=ft.Border.all(width=0.5, color="white24"),
-                                            padding=10,
-                                            content=self.console
-                                        )
-                                    ],
-                                    alignment=ft.MainAxisAlignment.CENTER,
-                                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                                ),
-                                alignment=ft.Alignment.CENTER,
-                            ),
-            )
-        self.page.window.resizable = False
-        self.page.window.maximizable = False
-        self.page.window.width = 400
-        self.page.window.height = 325
+            expand=True,
+            width=430,
+            content=ft.Container(
+                alignment=ft.Alignment.CENTER,
+                content= ft.Column(
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.Row(
+                            controls=[self.code_label,copy_code_button],
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                        ft.Divider(height=2, thickness=.5),
+                        ft.Container(
+                            height=200, 
+                            border=ft.Border.all(width=0.5, color="white24"),
+                            padding=10,
+                            content=self.console
+                        )
+                    ],
+                ),
+            ),
+        )
         self.page.add(connection_page)
 
-    def sendMessage(self):
-        if self.transmitionManager and self.message_text_area:
+    async def sendMessage(self, e):
+        if self.transmitionManager:
             self.transmitionManager.sendMessage(self.message_text_area.value)
-            self.log_message("You > "+self.message_text_area.value)
+            await self.log_message("You > "+self.message_text_area.value)
 
-    async def showNotif(self,time):
-        self.page.overlay.append(self.notification_layer)
-        self.notification_box.visible = True
-        self.notification_box.opacity = 1
-        self.page.update()
+    def uploadRequest(self,e: ft.FilePickerResultEvent):
+        if not len(e.files):return
+        self.log_message("Upload Request > "+e.files[0])
+        self.transmitionManager.requestSendingFile(os.path.split(e.files[0]))
 
-        await asyncio.sleep(time)
+    async def pickFile(self):
+        self.filePicker.on_result = self.uploadRequest
+        await self.filePicker.pick_files()
 
-        self.notification_box.opacity = 0
-        self.page.update()
-        
-        await asyncio.sleep(0.3) 
-        self.notification_box.visible = False
-        self.page.update()
+    async def closeCall(self,reason):
+        await self.showHomeScreen()
+        self.transmitionManager = None
+        self.console.controls.clear()
 
-    def setNotif(self, title:str, message:str):
-        self.notification_box = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text(title),
-                    ft.Text(message),
-                    ]
-                ),
-            padding=10,
-            border_radius=5,
-            visible=False,
-            animate_opacity=300,
-            opacity=0,
-        )
+    async def reqestCall(self,tid,fileName,fileSize):
+        pass
 
-        self.notification_layer = ft.Stack(
-                controls=[
-                    ft.Row(
-                        controls=[self.notification_box],
-                        alignment=ft.MainAxisAlignment.START,
-                    )
-                ],
-                expand=True,
-        )
+    async def statusCall(self,tid,status):
+        pass
+
+    async def setupCallbacks(self):
+        self.transmitionManager.messageCallback = self.log_message
+        self.transmitionManager.closeCallback = self.closeCall
+        self.requestCallback = self.reqestCall
+        self.statusCallback = self.statusCall
+        self.progressCallback = None
 
     async def showConnected(self):
+            self.page.window.resizable = False
+            self.page.window.maximizable = False
+            self.page.window.width = 800
+            self.page.window.height = 650
             self.page.clean()
-    
+
+            #Chat Tab
             self.message_text_area = ft.TextField(label="Chat Box", expand=True, hint_text="Hi !")
             send_message_button = ft.OutlinedButton(
                 content="Send Message",
@@ -229,78 +199,111 @@ class App:
                 ),
                 height=50
             )
+
+            #Uploads Tab
+
+            self.uploadList = ft.ListView(auto_scroll=True,expand=True)
+
+            uploadFileButton = ft.OutlinedButton(
+                content="Upload File",
+                icon=ft.Icons.UPLOAD_FILE,
+                on_click=self.pickFile,
+                style=ft.ButtonStyle(
+                    shape=ft.RoundedRectangleBorder(radius=4),
+                ),
+                height=50,
+                width=self.page.window.width
+            )
+
+            #Downloads Tab
+
+            self.downloadList = ft.ListView(auto_scroll=True,expand=True)
             
             connection_page = ft.SafeArea(
-                                expand=True,
-                                content=ft.Tabs(
-                                    length=3,
-                                    expand=True,
-                                    content=ft.Column(
-                                        controls=[
-                                            ft.TabBar(
-                                                scrollable=False,
-                                                tabs=[
-                                                    ft.Tab(
-                                                        label="Chat", 
-                                                        icon=ft.Icons.CHAT_SHARP,
-                                                        expand=True
-                                                    ),
-                                                    ft.Tab(
-                                                        label="Uploads", 
-                                                        icon=ft.Icons.FILE_UPLOAD,
-                                                        expand=True
-                                                    ),
-                                                    ft.Tab(
-                                                        label="Downloads", 
-                                                        icon=ft.Icons.DOWNLOAD,
-                                                        expand=True
-                                                    ),
-                                                ]
-                                            ),
-                                            ft.TabBarView(
-                                                expand=True,
-                                                controls=[
-                                                    ft.Container(
-                                                        alignment=ft.Alignment.CENTER,
-                                                        content = ft.Column(
-                                                            alignment=ft.MainAxisAlignment.CENTER,
-                                                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                                                            controls = [
-                                                                ft.Container(
-                                                                    expand = True,
-                                                                    border=ft.Border.all(width=0.5, color="white24"),
-                                                                    padding=10,
-                                                                    content=self.console
-                                                                ),
-                                                                ft.Divider(height=2, thickness=.5),
-                                                                ft.Row(
-                                                                    controls=[self.message_text_area,send_message_button],
-                                                                    alignment=ft.MainAxisAlignment.CENTER,
-                                                                ),
-                                                            ]
-                                                        )
-                                                    ),
-                                                    ft.Container(
-                                                        alignment=ft.Alignment.CENTER,
-                                                        content=ft.Text("Uploads"),
-                                                    ),
-                                                    ft.Container(
-                                                        alignment=ft.Alignment.CENTER,
-                                                        content=ft.Text("Downloads"),
-                                                    ),
-                                                ],
-                                            ),
-                                            
-                                        ],
-                                        alignment=ft.MainAxisAlignment.CENTER,
-                                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                expand=True,
+                content=ft.Tabs(
+                    length=3,
+                    expand=True,
+                    content=ft.Column(
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            ft.TabBar(
+                                scrollable=False,
+                                tabs=[
+                                    ft.Tab(
+                                        label="Chat", 
+                                        icon=ft.Icons.CHAT_SHARP,
+                                        expand=True,
                                     ),
-                                ),
-                )
-            self.page.window.resizable = False
-            self.page.window.maximizable = False
-            self.page.window.width = 800
-            self.page.window.height = 650
+                                    ft.Tab(
+                                        label="Uploads", 
+                                        icon=ft.Icons.FILE_UPLOAD,
+                                        expand=True
+                                    ),
+                                    ft.Tab(
+                                        label="Downloads", 
+                                        icon=ft.Icons.DOWNLOAD,
+                                        expand=True
+                                    ),
+                                ]
+                            ),
+                            ft.TabBarView(
+                                expand=True,
+                                controls=[
+                                    ft.Container(
+                                        alignment=ft.Alignment.CENTER,
+                                        content = ft.Column(
+                                            alignment=ft.MainAxisAlignment.CENTER,
+                                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                            controls = [
+                                                ft.Container(
+                                                    expand=True,
+                                                    border=ft.Border.all(width=0.5, color="white24"),
+                                                    padding=10,
+                                                    content=self.console
+                                                ),
+                                                ft.Divider(height=2, thickness=.5),
+                                                ft.Row(
+                                                    controls=[self.message_text_area,send_message_button],
+                                                    alignment=ft.MainAxisAlignment.CENTER,
+                                                ),
+                                            ]
+                                        )
+                                    ),
+                                    ft.Container(
+                                        alignment=ft.Alignment.CENTER,
+                                        content=ft.Column(
+                                            alignment=ft.MainAxisAlignment.CENTER,
+                                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                            controls = [
+                                                ft.Container(
+                                                    expand=True,
+                                                    height=200, 
+                                                    border=ft.Border.all(width=0.5, color="white24"),
+                                                    padding=10,
+                                                    content=self.uploadList,
+                                                ),
+                                                ft.Divider(height=2, thickness=.5),
+                                                uploadFileButton
+                                            ]
+                                        )
+                                    ),
+                                    ft.Container(
+                                        alignment=ft.Alignment.CENTER,
+                                        content= ft.Container(
+                                            expand=True,
+                                            border=ft.Border.all(width=0.5, color="white24"),
+                                            padding=10,
+                                            content=self.downloadList,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ],
+                    ),
+                ),
+            )
             self.page.add(connection_page)
 
     async def joinRoom(self,e):
@@ -322,11 +325,11 @@ class App:
                 await self.log_message("Hole Punching ...")
                 await stun.holePunching(localport,addr)
                 await self.log_message("Hole Punched !")
-                Client = quic.QuicNetworking()
                 if addr[0] == stun.getLocalInfo(False)[0]: 
                     addr = ("127.0.0.1",addr[1])
                 await self.log_message("Connecting to addr: "+str(addr))
-                success = await Client.connectClient(conf,addr,localport,fp)
+                self.transmitionManager = TransmitionManager(conf,localport,addr,fp)
+                success = await self.transmitionManager.connect()
                 if not success:
                     await self.log_message("Could not connect to server, invalid fingerprint...")
                     await self.showHomeScreen()
@@ -334,13 +337,13 @@ class App:
                 else:
                     await self.log_message("Sucessfully connected to server!")
                     await self.showConnected()
-                    self.transmitionManager = TransmitionManager(conf,localport,addr,fp)
-                    await self.transmitionManager.connect()
+                    await self.setupCallbacks()
             else:
                 await self.log_message("An error happened while connecting to the room")
                 await self.showHomeScreen()
                 self.transmitionManager = None
-        except:
+        except Exception as e:
+            print(e)
             await self.showHomeScreen()
             self.transmitionManager = None
 
@@ -360,11 +363,10 @@ class App:
             await self.log_message("Hole Punching ...")
             await stun.holePunching(localport,addr)
             await self.log_message("Hole Punched !")
-            Server = quic.QuicNetworking()
-            await Server.createServer(conf,localport)
             await self.showConnected()
             self.transmitionManager = TransmitionManager(conf,localport,addr)
             await self.transmitionManager.connect()
+            await self.setupCallbacks()
         else:
             await self.log_message("An error happened while connecting to the room")
             self.showHomeScreen()

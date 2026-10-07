@@ -1,7 +1,4 @@
-import socket 
-import struct
-import time
-import os
+import os,asyncio,time,struct,socket
 
 STUN_SERVER = "stun.cloudflare.com"
 STUN_PORT = 3478
@@ -62,7 +59,7 @@ async def holePunching(localport,peer_addr):
                 sock.sendto(b"!punch!", peer_addr)
             except OSError:
                 pass
-            time.sleep(0.2)
+            await asyncio.sleep(0.2)
     finally:
         sock.close()
 

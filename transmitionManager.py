@@ -42,25 +42,34 @@ class TransmitionManager:
         self.pendingUploads = {}
         self.hashes = {}
         self.uploadStatus = {}
-        self.messagesQueue = asyncio.Queue()
+        #self.messageQueue = asyncio.Queue()
         self.systemPackets = asyncio.Queue()
-        self.fileRequests = asyncio.Queue()
+        #self.fileRequests = asyncio.Queue()
         self.conf = conf
         self.localport = localport
         self.addr = addr
         self.fp = fp
         self.networking = quic.QuicNetworking()
         self.packetManager = PacketManager()
+
+        self.messageCallback = None
+        self.requestCallback = None
+        self.progressCallback = None
+        self.statusCallback = None
+        self.closeCallback = None
+
         self.running = True
 
     async def connect(self):
         if self.addr and self.fp:
             success = await self.networking.connectClient(self.conf,self.addr,self.localport,self.fp)
+            while not self.networking.conn: await asyncio.sleep(0.05)
             asyncio.create_task(self.handleData())
             asyncio.create_task(self.handleSystem())
             return success
         else:
             await self.networking.createServer(self.conf, self.localport)
+            while not self.networking.conn: await asyncio.sleep(0.05)
             asyncio.create_task(self.handleData())
             asyncio.create_task(self.handleSystem())
             return True
@@ -112,6 +121,8 @@ class TransmitionManager:
             data = json.loads(data.decode("utf-8"))
             if data["Type"] == "FileConfirmation": 
                 self.uploadStatus[data["Data"]["Tid"]] = data["Data"]["Status"]
+                if self.statusCallback:
+                    asyncio.create_task(self.statusCallback(tid,data["Data"]["Status"]))
             elif data["Type"] == "HashConfirmation":
                 tid = data["Data"]["Tid"].hex()
                 hash = data["Data"]["Hash"]
@@ -125,14 +136,21 @@ class TransmitionManager:
     async def handleData(self):
         while self.running:
             data = await self.networking.queue.get()
-            if data[0:1] == PacketManager.OP_SYSTEM:
+            if data == None:
+                break
+            elif data[0:1] == PacketManager.OP_SYSTEM:
                 await self.systemPackets.put(data[1:])
             elif data[0:1] == PacketManager.OP_TEXT:
-                await self.messagesQueue.put(data[1:].decode("utf-8"))
+                if self.messageCallback:
+                    asyncio.create_task(self.messageCallback("Peer > "+data[1:].decode("utf-8")))
+                #await self.messagesQueue.put(data[1:].decode("utf-8"))
+                pass
             elif data[0:1] == PacketManager.OP_FILE_REQUEST:
                 info = json.loads(data[17:].decode("utf-8"))
                 self.pendingDownloads[data[1:17]] = info
-                await self.fileRequests.put((data[1:17],info))
+                if self.requestCallback:
+                    asyncio.create_task(self.requestCallback(data[1:17],info["FileName"],info["FileSize"]))
+                #await self.fileRequests.put((data[1:17],info))
             elif data[0:1] == PacketManager.OP_REQUEST_ACCEPTED:
                 tid = data[1:17]
                 info = {
@@ -160,3 +178,5 @@ class TransmitionManager:
                     self.downloads[tid]["FileWriter"].close()
                     del self.downloads[tid]
             self.networking.queue.task_done()
+        if self.closeCallback:
+            asyncio.create_task(self.closeCallback("Connection closed"))
