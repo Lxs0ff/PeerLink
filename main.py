@@ -566,5 +566,7 @@ class App:
 async def main(page: ft.Page):
     app = App()
     await app(page)
-    
+
+
+# COMMAND TO BUILD: python3 -m PyInstaller main.py --onefile --noconsole --icon icon.ico --add-data "assets/fonts;fonts" --collect-all flet
 ft.run(main, assets_dir="assets")
