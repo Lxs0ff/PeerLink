@@ -45,7 +45,9 @@ class Room:
     async def gatherICE(self,callback,fp = None):
         self.ice_connection = aioice.Connection(
             ice_controlling=True if self.token else False,
-            stun_server=("stun.l.google.com", 19302)
+            stun_server=("stun.l.google.com", 19302),
+            use_ipv4=True,
+            use_ipv6=True,
         )
 
         await self.ice_connection.gather_candidates()
