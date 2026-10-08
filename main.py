@@ -45,9 +45,11 @@ class App:
         self.message_text_area = None
 
         self.uploadList = None
+        self.uploadTIDS = []
         self.uploadCards = {}
 
         self.downloadList = None
+        self.downloadTIDS = []
         self.downloadCards = {}
 
         self.console = ft.ListView(auto_scroll=True,expand=True)
@@ -67,8 +69,37 @@ class App:
         self.page.vertical_alignment = ft.MainAxisAlignment.CENTER
         self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
+        asyncio.create_task(self.updateDownloadCards())
+        asyncio.create_task(self.updateUploadCards())
+
         #await self.showConnected()
         await self.showHomeScreen()
+
+    async def updateDownloadCards(self):
+        while True:
+            for tid in self.downloadTIDS[:]:
+                fileSize = self.transmitionManager.downloads[tid]["FileSize"]
+                bytesWritten = self.transmitionManager.downloads[tid]["BytesWritten"]
+                progress = bytesWritten/fileSize
+                self.downloadCards[tid]["progress"]["text"].value = f"{format_bytes(bytesWritten)}/{format_bytes(fileSize)}"
+                self.downloadCards[tid]["progress"]["ring"].value = progress
+                if progress == 1:
+                    self.downloadTIDS.remove(tid)
+            self.page.update()
+            await asyncio.sleep(0.03)
+
+    async def updateUploadCards(self):
+        while True:
+            for tid in self.uploadTIDS[:]:
+                fileSize = self.transmitionManager.uploads[tid]["FileSize"]
+                bytesSent = self.transmitionManager.uploads[tid]["BytesSent"]
+                progress = bytesSent/fileSize
+                self.uploadCards[tid]["progress"]["text"].value = f"{format_bytes(bytesSent)}/{format_bytes(fileSize)}"
+                self.uploadCards[tid]["progress"]["ring"].value = progress
+                if progress == 1:
+                    self.uploadTIDS.remove(tid)
+            self.page.update()
+            await asyncio.sleep(0.03)
 
     async def log_message(self, text: str):
         self.console.controls.append(ft.Text(text, size=12))
@@ -273,6 +304,7 @@ class App:
         tid = e.control.data["tid"]
         path = await self.filePicker.get_directory_path()
         if not path:return
+        self.downloadTIDS.append(tid)
         download_info = self.transmitionManager.downloads.get(tid)
         if download_info is None:
             bytes_written = 0
@@ -315,6 +347,7 @@ class App:
         self.page.update()
 
     async def requestAcceptedCall(self,tid):
+        self.uploadTIDS.append(tid)
         self.uploadCards[tid]["status"].value = "Uploading ... "
         self.uploadCards[tid]["progress"]["ring"].value = 0.01
         self.uploadCards[tid]["progress"]["text"].value = f"{format_bytes(self.transmitionManager.uploads[tid]["BytesSent"])}/{format_bytes(self.transmitionManager.uploads[tid]["FileSize"])}"
@@ -326,8 +359,12 @@ class App:
         self.uploadCards[tid]["status"].value = status
         if status == "Success":
             self.uploadCards[tid]["progress"]["ring"].value = 1
+            self.uploadCards[tid]["progress"]["text"].value = f"{format_bytes(self.uploadCards[tid]["fileSize"])}/{format_bytes(self.uploadCards[tid]["fileSize"])}"
+            self.uploadTIDS.remove(tid)
         elif status == "Failed":
             self.uploadCards[tid]["progress"]["ring"].value = None
+            self.uploadCards[tid]["progress"]["text"].value = ""
+            self.uploadTIDS.remove(tid)
         self.page.update()
 
     async def setupCallbacks(self):
@@ -474,18 +511,14 @@ class App:
             if connected:
                 conf = certif.createConfig(self.room_code)
                 await self.log_message("Connection successfull")
-                addr,localport = await room.exchangeAddr()
-                fp = addr[2]
-                addr = addr[0:2]
-                await self.log_message("Peer Address: "+str(addr[0:2]))
-                await self.log_message("Host Fingerprint:"+fp)
-                await self.log_message("Hole Punching ...")
-                await stun.holePunching(localport,addr)
-                await self.log_message("Hole Punched !")
-                if addr[0] == stun.getLocalInfo(False)[0]: 
-                    addr = ("127.0.0.1",addr[1])
-                await self.log_message("Connecting to addr: "+str(addr))
-                self.transmitionManager = TransmitionManager(conf,localport,addr,fp)
+                await self.log_message("Trying to establish a p2p connection ...")
+                success, conn, fp = await room.gatherICE()
+                if not success:
+                    await self.log_message("P2P Connection failed :()")
+                    await self.showHomeScreen()
+                    self.transmitionManager = None
+                await self.log_message("P2P Connection successfully established !")
+                self.transmitionManager = TransmitionManager(conf,conn,fp)
                 success = await self.transmitionManager.connect()
                 if not success:
                     await self.log_message("Could not connect to server, invalid fingerprint...")
@@ -515,12 +548,13 @@ class App:
             await self.log_message("Connection successfull")
             await self.log_message("Room ID: "+room.code)
             await self.log_message("Owner Token: "+room.token)
-            addr,localport = await room.exchangeAddr(fp)
-            await self.log_message("Peer Address: "+str(addr))
-            await self.log_message("Hole Punching ...")
-            await stun.holePunching(localport,addr)
-            await self.log_message("Hole Punched !")
-            self.transmitionManager = TransmitionManager(conf,localport,addr)
+            success, conn, fp = await room.gatherICE(fp)
+            if not success:
+                await self.log_message("P2P Connection failed :()")
+                await self.showHomeScreen()
+                self.transmitionManager = None
+            await self.log_message("P2P Connection successfully established !")
+            self.transmitionManager = TransmitionManager(conf,conn)
             await self.transmitionManager.connect()
             await self.setupCallbacks()
             await self.showConnected()

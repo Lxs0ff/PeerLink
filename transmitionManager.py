@@ -1,4 +1,5 @@
 import os,json,hashlib,asyncio,quic
+import aioquic,time
 
 class PacketManager:
     OP_TEXT = b'\x01'
@@ -35,7 +36,7 @@ class PacketManager:
         return self.OP_SYSTEM+json.dumps(info).encode("utf-8")
 
 class TransmitionManager:
-    def __init__(self,conf,localport:int,addr=None,fp=None):
+    def __init__(self,conf,conn,fp=None):
         self.downloads = {}
         self.uploads = {}
         self.pendingDownloads = {}
@@ -46,8 +47,7 @@ class TransmitionManager:
         self.systemPackets = asyncio.Queue()
         #self.fileRequests = asyncio.Queue()
         self.conf = conf
-        self.localport = localport
-        self.addr = addr
+        self.conn = conn
         self.fp = fp
         self.networking = quic.QuicNetworking()
         self.packetManager = PacketManager()
@@ -62,19 +62,15 @@ class TransmitionManager:
         self.running = True
 
     async def connect(self):
-        if self.addr and self.fp:
-            success = await self.networking.connectClient(self.conf,self.addr,self.localport,self.fp)
-            while not self.networking.conn: await asyncio.sleep(0.05)
+        if self.conf.is_client:
+            success = await self.networking.connectClient(self.conf, self.conn, self.fp)
             asyncio.create_task(self.handleData())
             asyncio.create_task(self.handleSystem())
             return success
-        else:
-            await self.networking.createServer(self.conf, self.localport)
-            while not self.networking.conn: await asyncio.sleep(0.05)
-            asyncio.create_task(self.handleData())
-            asyncio.create_task(self.handleSystem())
-            return True
-
+        await self.networking.createServer(self.conf, self.conn)
+        asyncio.create_task(self.handleData())
+        asyncio.create_task(self.handleSystem())
+        
     def sendMessage(self,message:str):
         self.networking.send(self.packetManager.createMessagePacket(message))
 
@@ -115,7 +111,6 @@ class TransmitionManager:
         self.networking.send(self.packetManager.createHashConfirmation(final_hash, tid))
         self.pendingUploads[tid] = "Waiting Confirmation"
         self.uploads[tid]["FileReader"].close()
-        del self.uploads[tid]
 
     async def handleSystem(self):
         while self.running:
@@ -182,7 +177,6 @@ class TransmitionManager:
                 if self.downloads[tid]["BytesWritten"] >= self.downloads[tid]["FileSize"]:
                     self.hashes[tid.hex()] = self.downloads[tid]["Hash"].hexdigest()
                     self.downloads[tid]["FileWriter"].close()
-                    del self.downloads[tid]
             self.networking.queue.task_done()
         if self.closeCallback:
             asyncio.create_task(self.closeCallback("Connection closed"))

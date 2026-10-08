@@ -1,9 +1,10 @@
 import asyncio
 import certificates as certif
-from aioquic.asyncio import serve
-from aioquic.asyncio import connect
-from aioquic.asyncio import connect, QuicConnectionProtocol
+from aioquic.asyncio import QuicConnectionProtocol
 from aioquic.quic.events import DatagramFrameReceived,ConnectionTerminated
+from aioquic.asyncio.server import QuicServer
+from aioquic.quic.connection import QuicConnection
+from ice_transport import IceTransport, pump, DUMMY_ADDR
 
 class ConnectionProtocol(QuicConnectionProtocol):
     def __init__(self, *args, **kwargs):
@@ -23,36 +24,38 @@ class ConnectionProtocol(QuicConnectionProtocol):
         self._quic.send_datagram_frame(data)
         self.transmit()
 
-class QuicNetworking():
+class QuicNetworking:
     def __init__(self):
         self.conn = None
-        self.connCtx = None
         self.queue = asyncio.Queue()
+        self._pump = None
 
-    def newConn(self,*args,**kwargs):
+    async def createServer(self, cfg, ice):
+        server = QuicServer(
+            configuration=cfg,
+            create_protocol=lambda *a, **kw: self._newConn(*a, **kw),
+        )
+        server.connection_made(IceTransport(ice))
+        self._pump = asyncio.create_task(pump(ice, server))
+
+    async def connectClient(self, cfg, ice, fp):
+        proto = ConnectionProtocol(QuicConnection(configuration=cfg), networking=self)
+        proto.connection_made(IceTransport(ice))
+        self._pump = asyncio.create_task(pump(ice, proto))
+        self.conn = proto
+        proto.connect(DUMMY_ADDR)
+        await proto.wait_connected()
+        return certif.peer_matches(proto, fp)
+
+    def _newConn(self, *args, **kwargs):
         self.conn = ConnectionProtocol(*args, **kwargs, networking=self)
         return self.conn
 
-    def send(self,data):
+    def send(self, data):
         self.conn.send(data)
-
-    async def createServer(self,cfg,localport):
-        await serve("127.0.0.1", localport, configuration=cfg,create_protocol=lambda *args, **kwargs: self.newConn(*args, **kwargs))
-
-    async def connectClient(self,cfg,addr,localport,fp):
-        self.connCtx = connect(
-            addr[0], 
-            addr[1], 
-            configuration=cfg,
-            local_port=localport,
-            create_protocol=lambda *args, **kwargs: ConnectionProtocol(*args, **kwargs, networking=self)
-        )
-        self.conn = await self.connCtx.__aenter__()
-        if not certif.peer_matches(self.conn, fp):
-            self.connCtx.close(error_code=1, reason_phrase="fingerprint mismatch")
-            return False
-        return True
-
+        
     async def close(self):
-        if self.networking.conn:
-            self.networking.conn.close()
+        if self.conn:
+            self.conn.close()
+        if self._pump:
+            self._pump.cancel()

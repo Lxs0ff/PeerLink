@@ -1,5 +1,6 @@
 import websockets as ws
-import asyncio
+import asyncio,aioice
+from aioice.candidate import Candidate
 import requests
 import json
 import stun
@@ -40,6 +41,54 @@ class Room:
             await self.close()
             return None
         return data
+
+    async def gatherICE(self,fp = None):
+        self.ice_connection = aioice.Connection(
+            ice_controlling=True if self.token else False,
+            stun_server=("stun.l.google.com", 19302)
+        )
+
+        await self.ice_connection.gather_candidates()
+
+        iceData = {
+            "ufrag": self.ice_connection.local_username,
+            "pwd": self.ice_connection.local_password,
+            "candidates": [c.to_sdp() for c in self.ice_connection.local_candidates],
+            "fingerprint": fp
+        }
+
+        if self.token and fp:
+            print("Waiting for a connection")
+            await self.waitFor("user_joined")
+            print("Sending ice data ...")
+            await self.send(json.dumps(iceData))
+            print("Waiting for ice data ...")
+            data = await self.waitFor("relay")
+            data = json.loads(data["data"])
+        else:
+            print("Waiting for ice data ...")
+            data = await self.waitFor("relay")
+            print("Sending address ...")
+            await self.send(json.dumps(iceData))
+            data = json.loads(data["data"])
+            fp = data["fingerprint"]
+        
+        self.ice_connection.remote_username = data["ufrag"]
+        self.ice_connection.remote_password = data["pwd"]
+
+        for c_str in data["candidates"]:
+            remote_candidate = Candidate.from_sdp(c_str) 
+            await self.ice_connection.add_remote_candidate(remote_candidate)
+
+        print("Punching through firewalls via aioice...")
+        try:
+            await asyncio.wait_for(self.ice_connection.connect(), timeout=15.0)
+            print("Hole punched successfully! Direct P2P tunnel established.")
+        except asyncio.TimeoutError:
+            print("Connection Timeout: Strict firewalls blocked direct P2P connectivity.")
+            return False,0,None,None,None
+        
+        return True,self.ice_connection,fp
 
     async def exchangeAddr(self,fp=None):
         if self.token and fp:

@@ -63,6 +63,5 @@ async def holePunching(localport,peer_addr):
     finally:
         sock.close()
 
-
 if __name__ == "__main__":
     print(getInfo())
