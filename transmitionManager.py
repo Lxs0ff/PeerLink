@@ -14,7 +14,7 @@ class PacketManager:
     def createFileRequest(self,pathToFile:str,filename:str):
         filesize = os.path.getsize(pathToFile)
         tid = os.urandom(16)
-        info = {"FileName":filename,"FileSize":filesize}
+        info = {"FileName":filename,"FileSize":filesize,"FilePath":pathToFile}
         return self.OP_FILE_REQUEST+tid+json.dumps(info).encode("utf-8"),tid,info
 
     def createFilePacket(self, tid, data):
@@ -27,7 +27,7 @@ class PacketManager:
         return self.OP_REQUEST_DENIED+tid
 
     def createHashConfirmation(self,hash,tid):
-        info = {"Type":"HashConfirmation","Data":{"Hash":hash, "Tid":tid}}
+        info = {"Type":"HashConfirmation","Data":{"Hash":hash, "Tid":tid.hex()}}
         return self.OP_SYSTEM+json.dumps(info).encode("utf-8")
     
     def createFileConfirmation(self,status,tid):
@@ -82,6 +82,7 @@ class TransmitionManager:
         packet,tid,info = self.packetManager.createFileRequest(pathToFile,fileName)
         self.pendingUploads[tid] = info
         self.networking.send(packet)
+        return tid
 
     def denyDownload(self,tid):
         if tid in self.pendingDownloads:
@@ -123,9 +124,9 @@ class TransmitionManager:
             if data["Type"] == "FileConfirmation": 
                 self.uploadStatus[data["Data"]["Tid"]] = data["Data"]["Status"]
                 if self.statusCallback:
-                    asyncio.create_task(self.statusCallback(tid,data["Data"]["Status"]))
+                    asyncio.create_task(self.statusCallback(data["Data"]["Tid"],data["Data"]["Status"]))
             elif data["Type"] == "HashConfirmation":
-                tid = data["Data"]["Tid"].hex()
+                tid = data["Data"]["Tid"]
                 hash = data["Data"]["Hash"]
                 if hash == self.hashes[tid]:
                     self.networking.send(self.packetManager.createFileConfirmation("Success",tid))
@@ -165,7 +166,7 @@ class TransmitionManager:
                 self.uploads[tid] = info
                 asyncio.create_task(self.handleUpload(tid))
                 if self.requestAcceptedCallback:
-                    asyncio.create_task(self.requestAcceptedCallback())
+                    asyncio.create_task(self.requestAcceptedCallback(tid))
             elif data[0:1] == PacketManager.OP_REQUEST_DENIED:
                 tid = data[1:17]
                 if tid in self.pendingUploads:
@@ -174,11 +175,11 @@ class TransmitionManager:
                         asyncio.create_task(self.requestDeniedCallback(tid))
             elif data[0:1] == PacketManager.OP_FILE_CHUNK:
                 tid = data[1:17]
-                data = data[17:]
-                self.downloads[tid]["Hash"].update(data)
-                self.downloads[tid]["FileWriter"].write(data)
-                self.downloads[tid]["BytesWritten"] += len(data)
-                if self.downloads[tid]["BytesWritten"] == self.downloads[tid]["FileSize"]:
+                chunk = data[17:]
+                self.downloads[tid]["Hash"].update(chunk)
+                self.downloads[tid]["FileWriter"].write(chunk)
+                self.downloads[tid]["BytesWritten"] += len(chunk)
+                if self.downloads[tid]["BytesWritten"] >= self.downloads[tid]["FileSize"]:
                     self.hashes[tid.hex()] = self.downloads[tid]["Hash"].hexdigest()
                     self.downloads[tid]["FileWriter"].close()
                     del self.downloads[tid]

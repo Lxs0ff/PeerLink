@@ -79,6 +79,118 @@ class App:
         self.console.controls.append(ft.Text(text, size=12))
         self.page.update()
 
+    def addUploadCard(self,tid,fileName,fileSize):
+        status = ft.Text(value="Waiting for confirmation ...")
+        progressRing = ft.ProgressRing()
+        progressText = ft.Text(value="")
+        card = ft.Card(
+            content=ft.Container(
+                padding=10,
+                content=ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls = [
+                                ft.Text(value=fileName),
+                                ft.Text(value=format_bytes(fileSize)),
+                            ]
+                        ),
+                        ft.Row(
+                            controls = [
+                                status,
+                                ft.VerticalDivider(width=20),
+                                progressRing,
+                                progressText
+                            ]
+                        ),
+                    ]
+                )
+            )
+        )
+        self.uploadCards[tid] = {
+            "card":card,
+            "status":status,
+            "progress":{
+                "ring":progressRing,
+                "text":progressText
+            },
+            "fileName":fileName,
+            "fileSize":fileName,
+        }
+        self.uploadList.controls.append(card)
+        self.page.update()
+
+    def addDownloadCard(self,tid,fileName,fileSize):
+        status = ft.Text(value="Waiting for confirmation ...")
+        progressRing = ft.ProgressRing()
+        progressText = ft.Text(value="")
+
+        acceptButton = ft.OutlinedButton(
+            content="Accept Download",
+            icon=ft.Icons.CHECK,
+            on_click=self.acceptDownload,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=4),
+            ),
+            height=50,
+            data={"tid":tid}
+        )
+
+        denyButton = ft.OutlinedButton(
+            content="Deny Download",
+            icon=ft.Icons.DO_NOT_DISTURB,
+            on_click=self.denyDownload,
+            style=ft.ButtonStyle(
+                shape=ft.RoundedRectangleBorder(radius=4),
+            ),
+            height=50,
+            data={"tid":tid}
+        )
+
+        buttonRow = ft.Row(
+            controls=[
+                acceptButton,
+                denyButton
+            ]
+        )
+        col = ft.Column(
+            controls=[
+                ft.Row(
+                    controls = [
+                        ft.Text(value=fileName),
+                        ft.Text(value=format_bytes(fileSize)),
+                    ]
+                ),
+                ft.Row(
+                    controls = [
+                        status,
+                        ft.VerticalDivider(width=20),
+                        progressRing,
+                        progressText
+                    ]
+                ),
+                buttonRow
+            ]
+        )
+        card = ft.Card(
+            content=ft.Container(
+                padding=10,
+                content=col
+            )
+        )
+        
+        self.downloadCards[tid] = {
+            "card":card,
+            "status":status,
+            "progress":{
+                "ring":progressRing,
+                "text":progressText
+            },
+            "buttons":buttonRow,
+            "col":col
+        }
+        self.downloadList.controls.append(card)
+        self.page.update()
+
     async def showHomeScreen(self):
         self.page.window.resizable = False
         self.page.window.maximizable = False
@@ -87,7 +199,6 @@ class App:
         self.page.title = "PeerLink"
         self.page.clean()
         
-
         self.create_button = ft.FilledButton(content="Create Room", on_click=self.createRoom, expand=True)
         self.join_button = ft.FilledButton(content="Join Room", on_click=self.joinRoom)
         self.room_code_field = ft.TextField(label="Room Code", hint_text="example-code-1")
@@ -156,6 +267,33 @@ class App:
         )
         self.page.add(connection_page)
 
+    def denyDownload(self,e):
+        tid = e.control.data["tid"]
+        self.downloadList.controls.remove(self.downloadCards[tid])
+        del self.downloadCards[tid]
+        self.transmitionManager.denyDownload(tid)
+        self.page.update()
+
+    async def acceptDownload(self,e):
+        tid = e.control.data["tid"]
+        path = await self.filePicker.get_directory_path()
+        if not path:return
+        download_info = self.transmitionManager.downloads.get(tid)
+        if download_info is None:
+            bytes_written = 0
+            file_size = 0
+            text = "..."
+        else:
+            bytes_written = download_info.get("BytesWritten", 0)
+            file_size = download_info.get("FileSize", 0)
+            text = f"{format_bytes(bytes_written)}/{format_bytes(file_size)}"
+        self.downloadCards[tid]["col"].controls.remove(self.downloadCards[tid]["buttons"])
+        self.downloadCards[tid]["status"].value = "Downloading ..."
+        self.downloadCards[tid]["progress"]["ring"].value = 0.01
+        self.downloadCards[tid]["progress"]["text"].value = text
+        self.transmitionManager.acceptDownload(tid,path)
+        self.page.update()
+
     async def sendMessage(self, e):
         if self.transmitionManager:
             self.transmitionManager.sendMessage(self.message_text_area.value)
@@ -164,7 +302,8 @@ class App:
     async def pickFile(self, e):
         files = await self.filePicker.pick_files()
         await self.log_message(f"Uploads > Request sent: {files[0].name} ({format_bytes(os.path.getsize(files[0].path))})")
-        self.transmitionManager.requestSendingFile(files[0].path,files[0].name)
+        tid = self.transmitionManager.requestSendingFile(files[0].path,files[0].name)
+        self.addUploadCard(tid,files[0].name,os.path.getsize(files[0].path))
 
     async def closeCall(self,reason):
         await self.showHomeScreen()
@@ -173,15 +312,28 @@ class App:
 
     async def requestCall(self,tid,fileName,fileSize):
         await self.log_message(f"Downloads > New file request: {fileName} ({format_bytes(fileSize)})")
+        self.addDownloadCard(tid,fileName,fileSize)
 
     async def requestDeniedCall(self,tid):
-        pass
+        self.uploadCards[tid]["status"].value = "Request Denied"
+        self.uploadCards[tid]["progress"]["ring"].value = 0
+        self.page.update()
 
     async def requestAcceptedCall(self,tid):
-        pass
+        self.uploadCards[tid]["status"].value = "Uploading ... "
+        self.uploadCards[tid]["progress"]["ring"].value = 0.01
+        self.uploadCards[tid]["progress"]["text"].value = f"{format_bytes(self.transmitionManager.uploads[tid]["BytesSent"])}/{format_bytes(self.transmitionManager.uploads[tid]["FileSize"])}"
+        self.page.update()
 
     async def statusCall(self,tid,status):
-        await self.log_message(f"Uploads > New upload status: {self.transmitionManager.uploads[tid]["FileName"]} -> {status}")
+        tid = bytes.fromhex(tid)
+        await self.log_message(f"Uploads > New upload status: {self.uploadCards[tid]["fileName"]} -> {status}")
+        self.uploadCards[tid]["status"].value = status
+        if status == "Success":
+            self.uploadCards[tid]["progress"]["ring"].value = 1
+        elif status == "Failed":
+            self.uploadCards[tid]["progress"]["ring"].value = None
+        self.page.update()
 
     async def setupCallbacks(self):
         self.transmitionManager.messageCallback = self.log_message
