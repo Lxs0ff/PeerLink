@@ -14,11 +14,6 @@ def format_bytes(size_in_bytes):
 
 class App:
     def __init__(self):
-
-        # GLOBAL CLASS TODO
-        # TODO: Make Download tab with accepting and denying requests in a list view and download progress in another
-        # TODO: Make Upload tab with sending requests and file upload progress in a list view
-        
         self.page = None
         maincolor = "#03e33b"
         seccolor = "#ffb000"
