@@ -42,7 +42,7 @@ class Room:
             return None
         return data
 
-    async def gatherICE(self,fp = None):
+    async def gatherICE(self,callback,fp = None):
         self.ice_connection = aioice.Connection(
             ice_controlling=True if self.token else False,
             stun_server=("stun.l.google.com", 19302)
@@ -58,17 +58,17 @@ class Room:
         }
 
         if self.token and fp:
-            print("Waiting for a connection")
+            await callback("Waiting for a connection")
             await self.waitFor("user_joined")
-            print("Sending ice data ...")
+            await callback("Sending ice data ...")
             await self.send(json.dumps(iceData))
-            print("Waiting for ice data ...")
+            await callback("Waiting for ice data ...")
             data = await self.waitFor("relay")
             data = json.loads(data["data"])
         else:
-            print("Waiting for ice data ...")
+            await callback("Waiting for ice data ...")
             data = await self.waitFor("relay")
-            print("Sending address ...")
+            await callback("Sending address ...")
             await self.send(json.dumps(iceData))
             data = json.loads(data["data"])
             fp = data["fingerprint"]
@@ -80,12 +80,12 @@ class Room:
             remote_candidate = Candidate.from_sdp(c_str) 
             await self.ice_connection.add_remote_candidate(remote_candidate)
 
-        print("Punching through firewalls via aioice...")
+        await callback("Punching through firewalls via ICE")
         try:
             await asyncio.wait_for(self.ice_connection.connect(), timeout=15.0)
-            print("Hole punched successfully! Direct P2P tunnel established.")
+            await callback("Hole punched successfully! Direct P2P tunnel established.")
         except asyncio.TimeoutError:
-            print("Connection Timeout: Strict firewalls blocked direct P2P connectivity.")
+            await callback("Connection Timeout: Strict firewalls blocked direct P2P connectivity.")
             return False,0,None,None,None
         
         return True,self.ice_connection,fp

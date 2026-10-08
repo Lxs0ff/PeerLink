@@ -512,7 +512,7 @@ class App:
                 conf = certif.createConfig(self.room_code)
                 await self.log_message("Connection successfull")
                 await self.log_message("Trying to establish a p2p connection ...")
-                success, conn, fp = await room.gatherICE()
+                success, conn, fp = await room.gatherICE(self.log_message)
                 if not success:
                     await self.log_message("P2P Connection failed :()")
                     await self.showHomeScreen()
@@ -548,7 +548,7 @@ class App:
             await self.log_message("Connection successfull")
             await self.log_message("Room ID: "+room.code)
             await self.log_message("Owner Token: "+room.token)
-            success, conn, fp = await room.gatherICE(fp)
+            success, conn, fp = await room.gatherICE(self.log_message,fp)
             if not success:
                 await self.log_message("P2P Connection failed :()")
                 await self.showHomeScreen()
