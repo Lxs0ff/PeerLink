@@ -82,11 +82,11 @@ class Room:
 
         await callback("Punching through firewalls via ICE")
         try:
-            await asyncio.wait_for(self.ice_connection.connect(), timeout=15.0)
+            await asyncio.wait_for(self.ice_connection.connect(), timeout=30.0)
             await callback("Hole punched successfully! Direct P2P tunnel established.")
         except asyncio.TimeoutError:
             await callback("Connection Timeout: Strict firewalls blocked direct P2P connectivity.")
-            return False,0,None,None,None
+            return False,None,None
         
         return True,self.ice_connection,fp
 

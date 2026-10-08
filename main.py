@@ -375,6 +375,19 @@ class App:
         self.transmitionManager.requestDeniedCallback = self.requestDeniedCall
         self.transmitionManager.statusCallback = self.statusCall
 
+    async def tabChange(self,e):
+        if e.control.selected_index == 3:
+            self.console.controls.clear()
+            self.downloadTIDS.clear()
+            self.downloadCards.clear()
+            self.downloadList.controls.clear()
+            self.uploadTIDS.clear()
+            self.uploadCards.clear()
+            self.uploadList.controls.clear()
+            self.transmitionManager = None
+            await self.showHomeScreen()
+            e.control.selected_index = 0 
+
     async def showConnected(self):
             self.page.window.resizable = False
             self.page.window.maximizable = False
@@ -382,7 +395,6 @@ class App:
             self.page.window.height = 650
             self.page.clean()
 
-            #Chat Tab
             self.message_text_area = ft.TextField(label="Chat Box", expand=True, hint_text="Hi !")
             send_message_button = ft.OutlinedButton(
                 content="Send Message",
@@ -416,7 +428,8 @@ class App:
             connection_page = ft.SafeArea(
                 expand=True,
                 content=ft.Tabs(
-                    length=3,
+                    length=4,
+                    on_change=self.tabChange,
                     expand=True,
                     content=ft.Column(
                         alignment=ft.MainAxisAlignment.CENTER,
@@ -438,6 +451,11 @@ class App:
                                     ft.Tab(
                                         label="Downloads", 
                                         icon=ft.Icons.DOWNLOAD,
+                                        expand=True
+                                    ),
+                                    ft.Tab(
+                                        label="Disconect", 
+                                        icon=ft.Icons.CANCEL,
                                         expand=True
                                     ),
                                 ]
@@ -553,6 +571,7 @@ class App:
                 await self.log_message("P2P Connection failed :()")
                 await self.showHomeScreen()
                 self.transmitionManager = None
+                return
             await self.log_message("P2P Connection successfully established !")
             self.transmitionManager = TransmitionManager(conf,conn)
             await self.transmitionManager.connect()
