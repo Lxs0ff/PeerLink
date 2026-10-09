@@ -2,6 +2,9 @@ import os,json,hashlib,asyncio,quic
 import aioquic,time
 
 class PacketManager:
+
+    # TODO: add ack N package for uploader backtracking 
+
     OP_TEXT = b'\x01'
     OP_FILE_CHUNK = b'\x03'
     OP_FILE_REQUEST = b'\x04'
@@ -37,6 +40,10 @@ class PacketManager:
 
 class TransmitionManager:
     def __init__(self,conf,conn,fp=None):
+
+        # TODO : ADD go back N, with ack packets for making sure files get send whole, prevent packet dropping and prevent corruption
+        # TODO: add N to uploads and downloads dict
+
         self.downloads = {}
         self.uploads = {}
         self.pendingDownloads = {}
@@ -177,6 +184,7 @@ class TransmitionManager:
                 if self.downloads[tid]["BytesWritten"] >= self.downloads[tid]["FileSize"]:
                     self.hashes[tid.hex()] = self.downloads[tid]["Hash"].hexdigest()
                     self.downloads[tid]["FileWriter"].close()
+            # TODO: add ack N backtracking OP_ACK_N
             self.networking.queue.task_done()
         if self.closeCallback:
             asyncio.create_task(self.closeCallback("Connection closed"))
