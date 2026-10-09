@@ -333,9 +333,7 @@ class App:
         self.addUploadCard(tid,files[0].name,os.path.getsize(files[0].path))
 
     async def closeCall(self,reason):
-        await self.showHomeScreen()
-        self.transmitionManager = None
-        self.console.controls.clear()
+        await self.resetApp()
 
     async def requestCall(self,tid,fileName,fileSize):
         await self.log_message(f"Downloads > New file request: {fileName} ({format_bytes(fileSize)})")
@@ -375,17 +373,20 @@ class App:
         self.transmitionManager.requestDeniedCallback = self.requestDeniedCall
         self.transmitionManager.statusCallback = self.statusCall
 
+    async def resetApp(self):
+        self.console.controls.clear()
+        self.downloadTIDS.clear()
+        self.downloadCards.clear()
+        self.downloadList.controls.clear()
+        self.uploadTIDS.clear()
+        self.uploadCards.clear()
+        self.uploadList.controls.clear()
+        self.transmitionManager = None
+        await self.showHomeScreen()
+
     async def tabChange(self,e):
         if e.control.selected_index == 3:
-            self.console.controls.clear()
-            self.downloadTIDS.clear()
-            self.downloadCards.clear()
-            self.downloadList.controls.clear()
-            self.uploadTIDS.clear()
-            self.uploadCards.clear()
-            self.uploadList.controls.clear()
-            self.transmitionManager = None
-            await self.showHomeScreen()
+            await self.resetApp()
             e.control.selected_index = 0 
 
     async def showConnected(self):
@@ -533,27 +534,23 @@ class App:
                 success, conn, fp = await room.gatherICE(self.log_message)
                 if not success:
                     await self.log_message("P2P Connection failed :()")
-                    await self.showHomeScreen()
-                    self.transmitionManager = None
+                    await self.resetApp()
+                    return
                 await self.log_message("P2P Connection successfully established !")
                 self.transmitionManager = TransmitionManager(conf,conn,fp)
                 success = await self.transmitionManager.connect()
                 if not success:
                     await self.log_message("Could not connect to server, invalid fingerprint...")
-                    await self.showHomeScreen()
-                    self.transmitionManager = None
+                    await self.resetApp()
                 else:
                     await self.log_message("Sucessfully connected to server!")
                     await self.setupCallbacks()
                     await self.showConnected()
             else:
                 await self.log_message("An error happened while connecting to the room")
-                await self.showHomeScreen()
-                self.transmitionManager = None
+                await self.resetApp()
         except Exception as e:
-            print(e)
-            await self.showHomeScreen()
-            self.transmitionManager = None
+            await self.resetApp()
 
     async def createRoom(self,e):
         self.page.title = "PeerLink - Host"
@@ -569,8 +566,7 @@ class App:
             success, conn, fp = await room.gatherICE(self.log_message,fp)
             if not success:
                 await self.log_message("P2P Connection failed :()")
-                await self.showHomeScreen()
-                self.transmitionManager = None
+                await self.resetApp()
                 return
             await self.log_message("P2P Connection successfully established !")
             self.transmitionManager = TransmitionManager(conf,conn)
@@ -579,8 +575,7 @@ class App:
             await self.showConnected()
         else:
             await self.log_message("An error happened while connecting to the room")
-            self.showHomeScreen()
-            self.transmitionManager = None
+            await self.resetApp()
 
 async def main(page: ft.Page):
     app = App()
