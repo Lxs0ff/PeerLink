@@ -1,5 +1,5 @@
 import os,json,hashlib,asyncio,quic
-import aioquic,time,struct
+import aioquic,time,struct,random
 from math import ceil
 from itertools import islice
 
@@ -73,6 +73,7 @@ class TransmitionManager:
         self.requestAcceptedCallback = None
         self.statusCallback = None
         self.closeCallback = None
+        self.downloadFinishedCallback = None
 
         self.running = True
 
@@ -122,26 +123,31 @@ class TransmitionManager:
         while chunk := reader.read(1024):
             self.downloads[tid]["Hash"].update(chunk)
             await asyncio.sleep(0)
-        self.hashes[tid] = self.downloads[tid]["Hash"].hexdigest()
-        if self.receivedHashes[tid] and self.hashes[tid]:
-            if self.receivedHashes[tid] == self.hashes[tid]:
-                self.networking.send(self.packetManager.createFileConfirmation("Success",tid))
+        self.hashes[tid.hex()] = self.downloads[tid]["Hash"].hexdigest()
+        if self.receivedHashes.get(tid.hex()):
+            if self.receivedHashes[tid.hex()] == self.hashes[tid.hex()]:
+                self.networking.send(self.packetManager.createFileConfirmation("Success",tid.hex()))
             else:
-                self.networking.send(self.packetManager.createFileConfirmation("Fail",tid))
-            del self.hashes[tid]
+                self.networking.send(self.packetManager.createFileConfirmation("Fail",tid.hex()))
+            del self.hashes[tid.hex()]
+            del self.receivedHashes[tid.hex()]
+        reader.close()
 
     async def handleMissing(self,tid):
         last = None
         while len(self.downloads[tid]["missing"]) > 0:
             d = self.downloads[tid]
+            inter = 0.5
             if len(d["missing"]) == last:
+                inter = max(inter / 1.5, 0.05)
                 Nlist = list(islice(d["missing"], 100))
             else:
+                inter = min(inter * 1.5, 0.5)
                 Nlist = list(islice((n for n in d["missing"] if n < d["max"]), 100))
             last = len(d["missing"])
             if len(Nlist):
                 self.networking.send(self.packetManager.createNACK(tid,Nlist))
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(inter)
 
     async def handleUpload(self,tid):
         cnt = 0
@@ -175,17 +181,19 @@ class TransmitionManager:
                 if self.statusCallback:
                     asyncio.create_task(self.statusCallback(data["Data"]["Tid"],data["Data"]["Status"]))
             elif data["Type"] == "HashConfirmation":
-                try:
-                    tid = data["Data"]["Tid"]
-                    self.receivedHashes[tid] = data["Data"]["Hash"]
-                    if self.receivedHashes[tid] and self.hashes[tid]:
-                        if self.receivedHashes[tid] == self.hashes[tid]:
-                            self.networking.send(self.packetManager.createFileConfirmation("Success",tid))
-                        else:
-                            self.networking.send(self.packetManager.createFileConfirmation("Fail",tid))
-                        del self.hashes[tid]
-                except:
-                    await self.systemPackets.put(json.dumps(data.encode("utf-8")))
+                tid = data["Data"]["Tid"]
+                self.receivedHashes[tid] = data["Data"]["Hash"]
+                if self.receivedHashes[tid] and self.hashes.get(tid):
+                    if self.receivedHashes[tid] == self.hashes[tid]:
+                        self.networking.send(self.packetManager.createFileConfirmation("Success",tid))
+                        if self.downloadFinishedCallback:
+                            asyncio.create_task(self.downloadFinishedCallback(tid,"Success"))
+                    else:
+                        self.networking.send(self.packetManager.createFileConfirmation("Fail",tid))
+                        if self.downloadFinishedCallback:
+                            asyncio.create_task(self.downloadFinishedCallback(tid,"Fail"))
+                    del self.hashes[tid]
+                    del self.receivedHashes[tid.hex()]
             self.systemPackets.task_done()
             
     async def handleData(self):

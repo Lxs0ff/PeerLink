@@ -1,6 +1,6 @@
 import flet as ft
 import certificates as certif
-import quic,stun,signaling,os,asyncio
+import quic,stun,signaling,os,asyncio,sys
 from transmitionManager import TransmitionManager
 
 def format_bytes(size_in_bytes):
@@ -11,6 +11,10 @@ def format_bytes(size_in_bytes):
         size_in_bytes /= 1024.0
         unit_index += 1
     return f"{size_in_bytes:.2f} {units[unit_index]}"
+
+def resource_path(p):
+    base = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base, p)
 
 class App:
     def __init__(self):
@@ -83,8 +87,12 @@ class App:
                 progress = bytesWritten/fileSize
                 self.downloadCards[tid]["progress"]["text"].value = f"{format_bytes(bytesWritten)}/{format_bytes(fileSize)}"
                 self.downloadCards[tid]["progress"]["ring"].value = progress
-                if progress == 1:
+                if progress >= 1:
+                    self.downloadCards[tid]["status"].value = "Success"
+                    self.downloadCards[tid]["progress"]["text"].value = f"{format_bytes(bytesWritten)}/{format_bytes(fileSize)}"
+                    self.downloadCards[tid]["progress"]["ring"].value = progress
                     self.downloadTIDS.remove(tid)
+
             self.page.update()
             await asyncio.sleep(0.03)
 
@@ -140,7 +148,7 @@ class App:
                 "text":progressText
             },
             "fileName":fileName,
-            "fileSize":fileName,
+            "fileSize":fileSize,
         }
         self.uploadList.controls.append(card)
         self.page.update()
@@ -212,7 +220,9 @@ class App:
                 "text":progressText
             },
             "buttons":buttonRow,
-            "col":col
+            "col":col,
+            "fileName":fileName,
+            "fileSize":fileSize,
         }
         self.downloadList.controls.append(card)
         self.page.update()
@@ -319,6 +329,7 @@ class App:
         self.downloadCards[tid]["progress"]["ring"].value = 0.01
         self.downloadCards[tid]["progress"]["text"].value = text
         self.transmitionManager.acceptDownload(tid,path)
+        self.downloadTIDS.append(tid)
         self.page.update()
 
     async def sendMessage(self, e):
@@ -358,12 +369,42 @@ class App:
         if status == "Success":
             self.uploadCards[tid]["progress"]["ring"].value = 1
             self.uploadCards[tid]["progress"]["text"].value = f"{format_bytes(self.uploadCards[tid]["fileSize"])}/{format_bytes(self.uploadCards[tid]["fileSize"])}"
-            self.uploadTIDS.remove(tid)
+            if tid in self.uploadTIDS:
+                self.uploadTIDS.remove(tid)
         elif status == "Fail":
             self.uploadCards[tid]["progress"]["ring"].value = None
             self.uploadCards[tid]["progress"]["text"].value = ""
-            self.uploadTIDS.remove(tid)
+            if tid in self.uploadTIDS:
+                self.uploadTIDS.remove(tid)
         self.page.update()
+
+    async def downloadFinishedCall(self,tid,status):
+        tid_key = bytes.fromhex(tid) if isinstance(tid, str) else tid
+        
+        if tid_key not in self.downloadCards:
+            for k in list(self.downloadCards.keys()):
+                if (isinstance(k, bytes) and k.hex() == tid) or k == tid:
+                    tid_key = k
+                    break
+        
+        if tid_key in self.downloadCards:
+            card_info = self.downloadCards[tid_key]
+            await self.log_message(f"Downloads > New download status: {card_info['fileName']} -> {status}")
+            
+            if status == "Success":
+                card_info["status"].value = "Finished"
+                card_info["progress"]["ring"].value = 1.0
+                fileSize = card_info["fileSize"]
+                card_info["progress"]["text"].value = f"{format_bytes(fileSize)}/{format_bytes(fileSize)}"
+            else:
+                card_info["status"].value = "Failed"
+                card_info["progress"]["ring"].value = 0
+                card_info["progress"]["text"].value = "Error"
+                
+            if tid_key in self.downloadTIDS:
+                self.downloadTIDS.remove(tid_key)
+                
+            self.page.update()
 
     async def setupCallbacks(self):
         self.transmitionManager.messageCallback = self.log_message
@@ -372,6 +413,7 @@ class App:
         self.transmitionManager.requestAcceptedCallback = self.requestAcceptedCall
         self.transmitionManager.requestDeniedCallback = self.requestDeniedCall
         self.transmitionManager.statusCallback = self.statusCall
+        self.transmitionManager.downloadFinishedCallback = self.downloadFinishedCall
 
     async def resetApp(self):
         self.console.controls.clear()
@@ -582,4 +624,5 @@ async def main(page: ft.Page):
     await app(page)
 
 # COMMAND TO BUILD: python3 -m PyInstaller main.py --onefile --noconsole --icon icon.ico --add-data "assets/fonts;fonts" --collect-all flet
-ft.run(main, assets_dir="assets")
+if __name__ == "__main__":
+    ft.run(main, assets_dir=resource_path("assets"))
