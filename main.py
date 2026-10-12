@@ -359,7 +359,7 @@ class App:
             self.uploadCards[tid]["progress"]["ring"].value = 1
             self.uploadCards[tid]["progress"]["text"].value = f"{format_bytes(self.uploadCards[tid]["fileSize"])}/{format_bytes(self.uploadCards[tid]["fileSize"])}"
             self.uploadTIDS.remove(tid)
-        elif status == "Failed":
+        elif status == "Fail":
             self.uploadCards[tid]["progress"]["ring"].value = None
             self.uploadCards[tid]["progress"]["text"].value = ""
             self.uploadTIDS.remove(tid)
